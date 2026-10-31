@@ -18,7 +18,7 @@ from pathlib import Path
 
 RULES = {
     "TelegramNL": {
-        "asn": [1273, 62041, 211157],
+        "asn": [62041, 211157],
         "ip_cidr": ["5.28.192.0/18", "109.239.140.0/24"],
     },
     "TelegramSG": {
