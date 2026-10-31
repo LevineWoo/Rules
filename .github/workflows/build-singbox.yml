@@ -1,0 +1,60 @@
+name: Build sing-box rule-sets
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/build_singbox.py"
+      - ".github/workflows/build-singbox.yml"
+  schedule:
+    - cron: "17 20 * * *"   # 每天北京时间 04:17 更新一次（ASN 网段会变）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-singbox
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install sing-box (latest release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER=$(gh release view --repo SagerNet/sing-box --json tagName -q .tagName | sed 's/^v//')
+          echo "sing-box ${VER}"
+          curl -fsSL "https://github.com/SagerNet/sing-box/releases/download/v${VER}/sing-box-${VER}-linux-amd64.tar.gz" | tar xz
+          sudo install "sing-box-${VER}-linux-amd64/sing-box" /usr/local/bin/sing-box
+          sing-box version
+
+      - name: Generate sing-box source from ASN / CIDR list
+        run: python3 scripts/build_singbox.py sing-box
+
+      - name: Compile .srs
+        run: |
+          for f in sing-box/*.json; do
+            sing-box rule-set compile "$f" -o "${f%.json}.srs"
+          done
+          ls -l sing-box
+
+      - name: Commit if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sing-box
+          if git diff --cached --quiet; then
+            echo "规则无变化"
+          else
+            git commit -m "chore: update sing-box rule-sets $(date -u +%F)"
+            git push
+          fi
